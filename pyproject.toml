@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "hf-translation"
+version = "0.1.0"
+description = ""
+authors = ["Damien Daspit <damien_daspit@sil.org>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+transformers = "^4.21.3"
+datasets = "^2.4.0"
+sentencepiece = "^0.1.97"
+iso639-lang = "^2.1.0"
+sacrebleu = "^2.2.1"
+sacremoses = "^0.0.53"
+torch = {version = "^1.12.1+cu116", source = "torch"}
+
+
+[[tool.poetry.source]]
+name = "torch"
+url = "https://download.pytorch.org/whl/cu116"
+default = false
+secondary = true
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
