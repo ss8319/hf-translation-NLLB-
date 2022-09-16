@@ -283,19 +283,16 @@ def main():
     if len(sys.argv) >= 2 and sys.argv[1].endswith(".json"):
         simple_parser = argparse.ArgumentParser()
         simple_parser.add_argument("config", type=str, help="The JSON config file.")
-        simple_parser.add_argument("--do_train", default=None, action="store_true", help="Whether to run training.")
-        simple_parser.add_argument("--do_eval", default=None, action="store_true", help="Whether to run eval on the dev set.")
-        simple_parser.add_argument("--do_predict", default=None, action="store_true", help="Whether to run predictions on the test set.")
+        simple_parser.add_argument("--do_train", default=False, action="store_true", help="Whether to run training.")
+        simple_parser.add_argument("--do_eval", default=False, action="store_true", help="Whether to run eval on the dev set.")
+        simple_parser.add_argument("--do_predict", default=False, action="store_true", help="Whether to run predictions on the test set.")
         args = simple_parser.parse_args()
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(args.config))
-        if args.do_train is not None:
-            training_args.do_train = args.do_train
-        if args.do_eval is not None:
-            training_args.do_eval = args.do_eval
-        if args.do_predict is not None:
-            training_args.do_predict = args.do_predict
+        training_args.do_train = args.do_train
+        training_args.do_eval = args.do_eval
+        training_args.do_predict = args.do_predict
         config_file_dir = os.path.dirname(os.path.abspath(args.config))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
