@@ -14,6 +14,8 @@ iso639-lang = "^2.1.0"
 sacrebleu = "^2.2.1"
 sacremoses = "^0.0.53"
 torch = {version = "^1.12.1+cu116", source = "torch"}
+protobuf = "<4.0.0"
+clearml = {extras = ["s3"], version = "^1.7.0"}
 
 
 [[tool.poetry.source]]
