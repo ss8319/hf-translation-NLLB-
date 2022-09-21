@@ -317,37 +317,38 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
+    simple_parser = argparse.ArgumentParser()
+    simple_parser.add_argument("--config", type=str, help="The JSON config file.")
+    simple_parser.add_argument("--do_train", default=False, action="store_true", help="Whether to run training.")
+    simple_parser.add_argument("--do_eval", default=False, action="store_true", help="Whether to run eval on the dev set.")
+    simple_parser.add_argument("--do_predict", default=False, action="store_true", help="Whether to run predictions on the test set.")
+    simple_parser.add_argument("--project_name", type=str, help="ClearML project name.")
+    simple_parser.add_argument("--task_name", type=str, help="ClearML task name.")
+    args = simple_parser.parse_args()
+
+    if not args.do_train and not args.do_eval and not args.do_predict:
+        args.do_train = True
+        args.do_eval = True
+        args.do_predict = True
+
     config_url = None
-    if len(sys.argv) >= 2 and sys.argv[1].endswith(".json"):
-        simple_parser = argparse.ArgumentParser()
-        simple_parser.add_argument("config", type=str, help="The JSON config file.")
-        simple_parser.add_argument("--do_train", default=False, action="store_true", help="Whether to run training.")
-        simple_parser.add_argument("--do_eval", default=False, action="store_true", help="Whether to run eval on the dev set.")
-        simple_parser.add_argument("--do_predict", default=False, action="store_true", help="Whether to run predictions on the test set.")
-        simple_parser.add_argument("--project_name", type=str, help="ClearML project name.")
-        simple_parser.add_argument("--task_name", type=str, help="ClearML task name.")
-        args = simple_parser.parse_args()
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments))
+    if args.config is not None:
         config_path = StorageManager.get_local_copy(args.config, force_download=True)
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        parser = HfArgumentParser((ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments))
         model_args, data_args, training_args = parser.parse_json_file(json_file=config_path)
-        if not args.do_train and not args.do_eval and not args.do_predict:
-            training_args.do_train = True
-            training_args.do_eval = True
-            training_args.do_predict = True
-        else:
-            training_args.do_train = args.do_train
-            training_args.do_eval = args.do_eval
-            training_args.do_predict = args.do_predict
-        if args.project_name is not None:
-            model_args.project_name = args.project_name
-        if args.task_name is not None:
-            model_args.task_name = args.task_name
         config_url = conform_url(args.config)
     else:
-        parser = HfArgumentParser((ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments))
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    training_args.do_train = args.do_train
+    training_args.do_eval = args.do_eval
+    training_args.do_predict = args.do_predict
+    if args.project_name is not None:
+        model_args.project_name = args.project_name
+    if args.task_name is not None:
+        model_args.task_name = args.task_name
 
     if model_args.project_name is None:
         model_args.project_name = model_args.task_name
