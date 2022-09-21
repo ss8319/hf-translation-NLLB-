@@ -318,10 +318,11 @@ def main():
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
     simple_parser = argparse.ArgumentParser()
-    simple_parser.add_argument("--config", type=str, help="The JSON config file.")
+    simple_parser.add_argument("--config_file", type=str, help="The JSON config file.")
     simple_parser.add_argument("--do_train", default=False, action="store_true", help="Whether to run training.")
     simple_parser.add_argument("--do_eval", default=False, action="store_true", help="Whether to run eval on the dev set.")
     simple_parser.add_argument("--do_predict", default=False, action="store_true", help="Whether to run predictions on the test set.")
+    simple_parser.add_argument("--enable_clearml", default=False, action="store_true", help="Enable ClearML.")
     simple_parser.add_argument("--project_name", type=str, help="ClearML project name.")
     simple_parser.add_argument("--task_name", type=str, help="ClearML task name.")
     args = simple_parser.parse_args()
@@ -333,12 +334,12 @@ def main():
 
     config_url = None
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, Seq2SeqTrainingArguments))
-    if args.config is not None:
-        config_path = StorageManager.get_local_copy(args.config, force_download=True)
+    if args.config_file is not None:
+        config_path = StorageManager.get_local_copy(args.config_file, force_download=True)
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
         model_args, data_args, training_args = parser.parse_json_file(json_file=config_path)
-        config_url = conform_url(args.config)
+        config_url = conform_url(args.config_file)
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
@@ -352,7 +353,7 @@ def main():
 
     if model_args.project_name is None:
         model_args.project_name = model_args.task_name
-    if model_args.project_name is not None and model_args.task_name is not None:
+    if args.enable_clearml:
         Task.init(project_name=model_args.project_name, task_name=model_args.task_name)
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
@@ -399,8 +400,12 @@ def main():
     is_output_dir_local = output_dir is not None
     if output_dir is None:
         output_dir = StorageManager.download_folder(output_url, mkdtemp(), overwrite=True)
+        if training_args.logging_dir.startswith(training_args.output_dir):
+            logging_dir = training_args.logging_dir
+            logging_dir = output_dir + logging_dir[len(training_args.output_dir):]
+            training_args.logging_dir = logging_dir
+    training_args.output_dir = output_dir
     try:
-        training_args.output_dir = output_dir
         if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
             last_checkpoint = get_last_checkpoint(training_args.output_dir)
             if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
