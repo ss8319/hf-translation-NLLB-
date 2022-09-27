@@ -764,7 +764,8 @@ def main():
             trainer.save_state()
 
             if data_args.delete_checkpoints_at_end:
-                checkpoints = [str(x) for x in Path(output_dir).glob(f"{PREFIX_CHECKPOINT_DIR}-*") if os.path.isdir(x)]
+                logger.info("Deleting checkpoints")
+                checkpoints = [str(x) for x in Path(training_args.output_dir).glob(f"{PREFIX_CHECKPOINT_DIR}-*") if os.path.isdir(x)]
                 for checkpoint in checkpoints:
                     shutil.rmtree(checkpoint)
 
