@@ -21,6 +21,7 @@ Fine-tuning the library models for sequence to sequence.
 import argparse
 import logging
 import os
+from pathlib import Path
 import re
 import shutil
 import sys
@@ -57,7 +58,8 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint
+from transformers.trainer_callback import EarlyStoppingCallback
+from transformers.trainer_utils import get_last_checkpoint, PREFIX_CHECKPOINT_DIR
 
 
 logger = logging.getLogger(__name__)
@@ -73,7 +75,12 @@ def get_extension(file):
 
 def get_direct_access(url):
     helper = StorageHelper.get(url)
-    return helper.get_driver_direct_access(url)
+    if helper.base_url == "file://":
+        full_url = StorageHelper.conform_url(url)
+        # now get rid of the file:// prefix
+        path = Path(full_url[7:])
+        return path.as_posix()
+    return None
 
 
 def conform_url(url):
@@ -99,7 +106,7 @@ def make_absolute(config_url, path):
 
         return [p if is_absolute(p) else config_dir_url + p for p in path]
 
-    config_dir = os.path.basename(config_path)
+    config_dir = os.path.dirname(config_path)
     if isinstance(path, str):
         return path if is_absolute(path) else os.path.join(config_dir, path)
 
@@ -291,6 +298,27 @@ class DataTrainingArguments:
             )
         },
     )
+    early_stopping_patience: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Use with :doc:`metric_for_best_model` to stop training when the specified metric worsens for"
+                " :doc:`early_stopping_patience` evaluation calls."
+            )
+        }
+    )
+    early_stopping_threshold: Optional[float] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Use with :doc:`metric_for_best_model` and :doc:`early_stopping_patience` to denote how much the"
+                " specified metric must improve to satisfy early stopping conditions."
+            )
+        }
+    )
+    delete_checkpoints_at_end: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to delete checkpoints at end of training."}
+    )
 
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
@@ -400,10 +428,10 @@ def main():
     is_output_dir_local = output_dir is not None
     if output_dir is None:
         output_dir = StorageManager.download_folder(output_url, mkdtemp(), overwrite=True)
-        if training_args.logging_dir.startswith(training_args.output_dir):
-            logging_dir = training_args.logging_dir
-            logging_dir = output_dir + logging_dir[len(training_args.output_dir):]
-            training_args.logging_dir = logging_dir
+    if training_args.logging_dir.startswith(training_args.output_dir):
+        logging_dir = training_args.logging_dir
+        logging_dir = output_dir + logging_dir[len(training_args.output_dir):]
+        training_args.logging_dir = logging_dir
     training_args.output_dir = output_dir
     try:
         if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
@@ -707,6 +735,13 @@ def main():
             data_collator=data_collator,
             compute_metrics=compute_metrics if training_args.predict_with_generate else None,
         )
+        if data_args.early_stopping_patience > 0:
+            trainer.add_callback(
+                EarlyStoppingCallback(
+                    early_stopping_patience=data_args.early_stopping_patience,
+                    early_stopping_threshold=data_args.early_stopping_threshold
+                )
+            )
 
         # Training
         if training_args.do_train:
@@ -727,6 +762,11 @@ def main():
             trainer.log_metrics("train", metrics)
             trainer.save_metrics("train", metrics)
             trainer.save_state()
+
+            if data_args.delete_checkpoints_at_end:
+                checkpoints = [str(x) for x in Path(output_dir).glob(f"{PREFIX_CHECKPOINT_DIR}-*") if os.path.isdir(x)]
+                for checkpoint in checkpoints:
+                    shutil.rmtree(checkpoint)
 
         # Evaluation
         results = {}
@@ -768,7 +808,7 @@ def main():
                         predict_results.predictions, skip_special_tokens=True, clean_up_tokenization_spaces=True
                     )
                     predictions = [pred.strip() for pred in predictions]
-                    output_prediction_file = os.path.join(training_args.output_dir, f"test.trg-predictions.detok.txt.{trainer.state.global_step}")
+                    output_prediction_file = os.path.join(training_args.output_dir, "generated_predictions.txt")
                     with open(output_prediction_file, "w", encoding="utf-8") as writer:
                         writer.write("\n".join(predictions))
 
