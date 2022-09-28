@@ -128,6 +128,13 @@ def load_text_dataset(src_lang, trg_lang, data_files, datasets, split):
             data.append({src_lang: src_line.strip(), trg_lang: trg_line.strip()})
     datasets[split] = Dataset.from_dict({"translation": data})
 
+
+def delete_url(url):
+    parsed = urlparse(url)
+    helper = StorageHelper.get(f"{parsed.scheme}://{parsed.netloc}")
+    helper.delete(parsed.path)
+
+
 @dataclass
 class ModelArguments:
     """
@@ -425,9 +432,12 @@ def main():
     last_checkpoint = None
     output_url = make_absolute(config_url, training_args.output_dir)
     output_dir = get_direct_access(output_url)
-    is_output_dir_local = output_dir is not None
+    temp_dir = None
     if output_dir is None:
-        output_dir = StorageManager.download_folder(output_url, mkdtemp(), overwrite=True)
+        temp_dir = mkdtemp()
+        StorageManager.download_folder(output_url, temp_dir, overwrite=True)
+        parsed = urlparse(output_url)
+        output_dir = os.path.join(temp_dir, parsed.path[1:])
     if training_args.logging_dir.startswith(training_args.output_dir):
         logging_dir = training_args.logging_dir
         logging_dir = output_dir + logging_dir[len(training_args.output_dir):]
@@ -436,7 +446,7 @@ def main():
     try:
         if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
             last_checkpoint = get_last_checkpoint(training_args.output_dir)
-            if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+            if last_checkpoint is None and any(os.path.isfile(p) for p in os.listdir(training_args.output_dir)):
                 raise ValueError(
                     f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                     "Use --overwrite_output_dir to overcome."
@@ -768,6 +778,11 @@ def main():
                 checkpoints = [str(x) for x in Path(training_args.output_dir).glob(f"{PREFIX_CHECKPOINT_DIR}-*") if os.path.isdir(x)]
                 for checkpoint in checkpoints:
                     shutil.rmtree(checkpoint)
+                if temp_dir is not None:
+                    urls = StorageManager.list(output_url, return_full_path=True)
+                    for url in urls:
+                        if url[len(output_url):].startswith(f"/{PREFIX_CHECKPOINT_DIR}-"):
+                            delete_url(url)
 
         # Evaluation
         results = {}
@@ -830,12 +845,10 @@ def main():
             trainer.push_to_hub(**kwargs)
         else:
             trainer.create_model_card(**kwargs)
-
-        if not is_output_dir_local:
-            StorageManager.upload_folder(training_args.output_dir, output_url)
     finally:
-        if not is_output_dir_local:
-            shutil.rmtree(training_args.output_dir)
+        if temp_dir is not None:
+            StorageManager.upload_folder(training_args.output_dir, output_url)
+            shutil.rmtree(temp_dir)
 
     return results
 
