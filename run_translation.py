@@ -778,11 +778,6 @@ def main():
                 checkpoints = [str(x) for x in Path(training_args.output_dir).glob(f"{PREFIX_CHECKPOINT_DIR}-*") if os.path.isdir(x)]
                 for checkpoint in checkpoints:
                     shutil.rmtree(checkpoint)
-                if temp_dir is not None:
-                    urls = StorageManager.list(output_url, return_full_path=True)
-                    for url in urls:
-                        if url[len(output_url):].startswith(f"/{PREFIX_CHECKPOINT_DIR}-"):
-                            delete_url(url)
 
         # Evaluation
         results = {}
@@ -847,6 +842,10 @@ def main():
             trainer.create_model_card(**kwargs)
     finally:
         if temp_dir is not None:
+            urls = StorageManager.list(output_url, return_full_path=True)
+            for url in urls:
+                if url[len(output_url):].startswith(f"/{PREFIX_CHECKPOINT_DIR}-"):
+                    delete_url(url)
             StorageManager.upload_folder(training_args.output_dir, output_url)
             shutil.rmtree(temp_dir)
 
